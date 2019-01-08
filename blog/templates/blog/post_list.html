@@ -1,22 +1,579 @@
-<html>
-    <head>
-        <title>Django Girls blog</title>
-    </head>
-    <body>
-        <div>
-            <h1><a href="/">Django Girls Blog</a></h1>
-        </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>MineralMap
+    </title>
+    <meta charset="utf-8" name="google-signin-client_id" content="489603763763-mhhipmh9003f63eraroa91u913u4bdvb.apps.googleusercontent.com"> 
 
-        <div>
-            <p>published: 14.06.2014, 12:14</p>
-            <h2><a href="">My first post</a></h2>
-            <p>Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Donec id elit non mi porta gravida at eget metus. Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus.</p>
-        </div>
+    <script src="https://apis.google.com/js/platform.js" async defer></script>
 
-        <div>
-            <p>published: 14.06.2014, 12:14</p>
-            <h2><a href="">My second post</a></h2>
-            <p>Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Donec id elit non mi porta gravida at eget metus. Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut f.</p>
-        </div>
-    </body>
+    <script src= "https://js.arcgis.com/4.9"></script>
+    <link rel="stylesheet" href="https://js.arcgis.com/4.9/esri/css/main.css">
+
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+</head>
+<body>
+    <div>
+    <div style="background-color:pink">
+    <h1 align="center" class="display-1">Ram's ArcGis Map</h1>
+    
+    
+    <button id="pointButton">Create Point</button>
+    
+
+    </div>
+    <!--<div align="center" class="g-signin2" data-onsuccess="onSignIn"></div>-->
+    <!-- Container with the Sign-In button. -->
+    <div id="gConnect" class="button" align="center">
+            <button class="g-signin2"
+                data-scope="email"
+                data-clientid="841077041629.apps.googleusercontent.com"
+                data-callback="onSignInCallback"
+                data-theme="dark"
+                data-cookiepolicy="single_host_origin">
+            </button>
+    </div>
+    <!-- Textarea for outputting data -->
+    <div id="response" class="hide">
+            <textarea id="responseContainer" style="width:100%; height:100px"></textarea>
+    </div>
+       
+    
+    <table border=1>
+        <tr>
+            <td valign="center">
+                <div id="toc"></div>
+            </td>
+            <td>
+                <div id ="mapDiv" style='width:2000px; height:900px'></div> 
+            </td>
+        </tr>
+        <tr>
+            <td colspan =2>
+                <div id="pages">PAGES GO HERE</div>
+            </td>
+        </tr>
+        <tr>
+            <td colspan=2>
+                <div id="attributeTable">Attribute Table</div>
+            </td>
+        </tr>
+    </table>
+    
+    <div align="center">
+    <!-- <div id="buttons" align="center"></div> -->
+    <table>
+        <tr>
+            <td>
+                <h5>Basemap:</h5>
+                <select id="cmbbasemaps" class="form-control form-control-sm" style="width:200px"></select>
+            </td>
+            <td>
+                <h5>Service:</h5>
+                <select style="width:200px" id="listServices" class="form-control form-control-sm"></select>
+            </td>
+        </tr>
+    </table>
+    <br/>
+    <div class="slider-wrapper" style="width:200px">
+            <label for="opacity-slider">Opacity</label>
+            <input type="range" min="0" max="1" value="1" id="opacity-slider" step="0.01">
+              <output for="opacity-slider" id="slider-value">1</output>
+    </div>
+    <button class="btn-success" id="IndependentLayerButton" align="bottom" style="margin-top: 10px">Geology Layer</button>
+    <button class="btn-info" id="KMLButton" align="bottom" style="margin-top: 10px">Stream Layer</button>
+    </div>
+    </div>    
+  <script>
+  //Initiate Global vars...
+  let map;
+  let mapview;
+  let layer;
+  let r;
+  let Request;
+  let selectedService;
+  let opacity;
+  let Graphic;
+  const DEFAULT_BASEMAP = "osm";
+  const DEFAULT_SERVICE = "Water_Network";
+  const DEFAULT_PAGE_SIZE = "100";
+
+
+  require([
+      "esri/Map", 
+      "esri/views/SceneView",
+      "esri/views/MapView",
+      "esri/request", 
+      "esri/layers/MapImageLayer", 
+      "esri/widgets/Legend",
+      "esri/widgets/Search",
+      "esri/layers/TileLayer",
+      "esri/layers/KMLLayer",
+      "esri/Graphic",
+      ], 
+    function(
+        Map, 
+        SceneView, 
+        MapView, 
+        esriRequest, 
+        MapImageLayer, 
+        Legend,
+        Search,
+        TileLayer,
+        KMLLayer,
+        GraphicClass,
+        ){
+        Request = esriRequest;
+        Graphic = GraphicClass;
+        generateBasemaps();
+        map = new Map({basemap: DEFAULT_BASEMAP});
+        mapview = new SceneView({
+            container: "mapDiv", 
+            map: map, 
+            zoom:1, 
+            center: [-123.283413, 45.803811],
+            scale:10000
+        });
+        let legend = new Legend({
+            view: mapview
+        });
+        mapview.ui.add(legend, "top-right");
+        let search = new Search({view: mapview});
+        mapview.ui.add(search, "bottom-left");
+        gapi.load('auth2', function() {
+            gapi.auth2.init();
+        });
+        let queryURL = "https://sampleserver6.arcgisonline.com/arcgis/rest/services/Military/MapServer/9/query";
+        let queryOptions = {
+                responseType: 'json',
+                query: {
+                    f: 'json',
+                    where: '1=1',
+                    returnCountOnly: true,
+                }
+        };
+        let buttonPages = [];
+
+        //Event listeners...
+        let IndependentLayerButton = document.getElementById("IndependentLayerButton");
+        IndependentLayerButton.addEventListener("click", onAddGeologyLayer);
+
+        let KMLButton = document.getElementById("KMLButton");
+        KMLButton.addEventListener("click", onAddKMLLayer);
+
+        let pointButton = document.getElementById("pointButton");
+        pointButton.addEventListener("click", drawPoint);
+
+        //opacity slider...
+        $('#opacity-slider').on("change mousemove", function() {
+            $('#slider-value').html($(this).val());
+            $('.wrapper img').css({
+                'opacity': $(this).val()
+            });
+            opacity = $(this).val();
+            map.findLayerById('geology').opacity = opacity;
+            console.log("opacity is set to " + opacity);
+            console.log("Map opacity is set to " + (map.findLayerById('geology').opacity));
+            //if (map.layer['geology'].opacity != opacity)
+        });
+
+
+    //Query the sample server and list all map services in a drop down.
+    populateMapServices();
+
+    Request(queryURL, queryOptions).then( response => r = response );
+    
+    //the "window.getCount = function(layerid)" approach here would make the getCount function globally accessible.
+    //Query the server and get the count of layers. 
+    function getCount(layerid, featureCount) {
+        let queryURL = "https://sampleserver6.arcgisonline.com/arcgis/rest/services/" + selectedService + "/MapServer/" + layerid + "/query";
+        let queryOptions = {
+            responseType: 'json',
+            query: {
+                f: 'json',
+                where: '1=1',
+                returnCountOnly: true,
+            }
+        };
+        Request(queryURL, queryOptions).then (
+            response => featureCount(response.data.count)
+            , response => featureCount(0) );
+    }
+
+    //Populate the drop down list of services.
+    function populateMapServices() {
+        let url ="https://sampleserver6.arcgisonline.com/arcgis/rest/services?f=json";
+        let options = {responseType: "json"};
+        Request(url, options).then(
+            response => {
+                let result = response.data;
+                let listServices = document.getElementById("listServices");
+                //Set event listener on change. 
+                listServices.addEventListener("change", onChangeServiceMap);
+
+                for (let i = 0; i < result.services.length; i++) {
+                    let option = document.createElement("option");
+                    option.textContent = result.services[i].name;
+                    if (DEFAULT_SERVICE == result.services[i].name) option.selected = true;
+                    listServices.appendChild(option);        
+                }
+                onChangeServiceMap();  
+            }
+        );  
+    }
+    
+    //this function NEEDS to be within the scope of this other function in order to work.... "closures"
+    function onChangeServiceMap(){
+        selectedService = listServices.options[listServices.selectedIndex].textContent;
+
+        layer = new MapImageLayer({
+            url: "https://sampleserver6.arcgisonline.com/arcgis/rest/services/" + selectedService + "/MapServer",
+            opacity: .75,
+        });
+        //Increase speed by clearing out underlying layers before adding another...
+        map.removeAll();
+        map.add(layer);
+        layer.when(buildToc);
+    }
+    
+    //This function creates the Table of contents of sublayers...
+    function buildToc() {
+            let toc = document.getElementById("toc");
+            toc.style = "width:500px";
+            toc.innerHTML = ""; //clear the toc entries from previous loads...
+            let layerList = document.createElement("ul"); 
+            layerList.style = "border-style:solid; border-color:red";
+            toc.appendChild(layerList);
+            populateLayerRecursively(layer, layerList);
+            mapview.goTo(layer.fullExtent) //ZOOMS TO LAYER
+    }
+
+    function onAddGeologyLayer(){
+        console.log("Independent Layer Button pushed...");
+        map.removeAll();
+        layer = new MapImageLayer({
+            id: "geology",
+            url: "https://gis.dogami.oregon.gov/arcgis/rest/services/Public/OGDC6/MapServer",
+            opacity: opacity,   
+        });
+        //Increase speed by clearing out underlying layers before adding another...
+        //map.removeAll();
+        map.add(layer);
+                    
+        //Promise for what to do "when" layer loads...
+       
+        layer.when(() =>{
+                        
+            let toc = document.getElementById("toc");
+            toc.innerHTML = ""; //clear the toc entries from previous loads...
+            let layerList = document.createElement("ul"); 
+            layerList.style = "border-style:solid; border-color:red";
+            toc.appendChild(layerList);
+            populateLayerRecursively(layer, layerList);
+            //mapview.goTo(layer.fullExtent)
+        })
+        
+    }
+
+    function onAddKMLLayer(){
+        console.log("KML Layer Button pushed...");
+
+        layer = new MapImageLayer({
+            id: "water",
+            url: "https://basemap.nationalmap.gov/arcgis/rest/services/USGSHydroCached/MapServer",
+            opacity: 1,   
+        });
+        //Increase speed by clearing out underlying layers before adding another...
+        //map.removeAll();
+        map.add(layer);
+                    
+        //Promise for what to do "when" layer loads...
+       
+        layer.when(() =>{
+                        
+            let toc = document.getElementById("toc");
+            toc.innerHTML = ""; //clear the toc entries from previous loads...
+            let layerList = document.createElement("ul"); 
+            layerList.style = "border-style:solid; border-color:red";
+            toc.appendChild(layerList);
+            populateLayerRecursively(layer, layerList);
+            mapview.goTo(layer.fullExtent)
+        })
+        
+    }
+
+    //Populate layer subitems in the input element
+    function populateLayerRecursively(thislayer, layerlist)
+    {
+        
+        let chk = document.createElement("input");
+        chk.type = "checkbox";
+        chk.value = thislayer.id;
+        chk.checked = thislayer.visible;
+        chk.style = "height: 15px; width: 15px; background-color: green;";
+    
+        chk.addEventListener("click", function(e) 
+            {
+            thislayer.visible=e.target.checked 
+            });
+
+
+        let btn = document.createElement("button");	 
+        btn.textContent = "View";
+        btn.className = "btn-warning";
+        //btn.style = "margin:5px; border-radius:30px";
+        btn.layerid = thislayer.id;
+        btn.addEventListener("click", openAttributesTable);
+        //getCount(thislayer.id, btn);
+        //btn.addEventListener("click", e => getCount(thislayer.id, btn))
+
+        let lbl = document.createElement("label");
+        lbl.textContent = String(thislayer.title + "   ");
+        //lbl.style = "color:blue; text-transform: uppercase";
+        let layeritem = document.createElement("li");
+        layeritem.appendChild(chk);
+        layeritem.appendChild(lbl);
+        layeritem.appendChild(btn);
+        layerlist.appendChild(layeritem);
+        if (thislayer.sublayers != null && thislayer.sublayers.items.length > 0)
+        {
+            let newlist = document.createElement("ul");
+            layerlist.appendChild(newlist);
+            for (let i = 0; i < thislayer.sublayers.length; i++)
+            {
+                populateLayerRecursively(thislayer.sublayers.items[i],newlist);
+    
+            }
+        }
+        //let sublayer = thislayer.sublayers.items[i];
+    }
+
+    //Populate thisLayer subitems in the input element.
+    function populateLayer(thisLayer, layerList){
+        for (let i = 0; i < thisLayer.sublayers.length; i++) {        
+            let sublayer = thisLayer.sublayers.items[i];
+            let chk = document.createElement("input");
+            chk.type = "checkbox";
+            chk.value = sublayer.id;
+            chk.className = "form-check-input";
+            chk.checked = sublayer.visible;
+            //makes the thisLayer visible when box is checked...
+            chk.addEventListener("click", function(e) { 
+                let clickedLayer = thisLayer.findSublayerById(parseInt(e.target.value));
+                clickedLayer.visible=e.target.checked});
+                let lbl = document.createElement("label");
+                lbl.textContent = sublayer.title;
+                lbl.className = "form-check-label";
+
+                let layerItem = document.createElement("li");
+                layerItem.appendChild(chk);
+                layerItem.appendChild(lbl);
+                layerList.appendChild(layerItem);
+            }
+    }
+
+    function drawPoint(x,y) {
+        let p = {
+            type: "point",
+            longitude: x, //x 45.80381960478048
+            latitude: y, //y -123.28341299999983
+        }
+        
+        let s = {
+            type: "simple-marker",
+            color: "red",
+            //size: "",
+        }
+
+        let graphic = new Graphic({geometry: p, symbol: s});
+        mapview.graphics.add(graphic);
+
+        console.log("Point Added!");
+
+    }
+
+    function drawLine(x1,y1, x2,y2) {
+
+    }
+
+    function drawPolygon (x1,y1, x2,y2, x3,y3) {
+
+    }
+
+    //Generate a list of buttons with basemaps.
+    function generateBasemaps(){
+        let basemaps = [];
+
+        basemaps.push("satellite");
+        basemaps.push("topo");
+        basemaps.push("osm");
+        basemaps.push("hybrid");
+        basemaps.push("terrain");
+        basemaps.push("gray");
+        basemaps.push("dark-gray");
+        basemaps.push("national-geographic");
+        basemaps.push("oceans");
+        basemaps.push("streets-relief-vector");
+        basemaps.push("streets-night-vector");
+        basemaps.push("topo-vector");
+
+        //let setBasemap = e => map.basemap = e.target.id;
+        let setBasemap = function(e){
+            let list = e.target;
+            let selectedBasemap = list.options[list.selectedIndex].textContent;
+            map.basemap = selectedBasemap;
+        }
+
+        let cmbbasemaps = document.getElementById("cmbbasemaps");
+        cmbbasemaps.addEventListener("change", setBasemap);
+        
+        for (let i=0; i < basemaps.length; i++) {
+        
+            let option = document.createElement("option");
+            option.id = basemaps[i];
+            //button.className = "btn btn-success";
+            //button.style.margin = "50px 10px 20px 3px";
+            option.textContent = basemaps[i];
+
+            //this will set the default basemap as...
+            if (basemaps[i] == DEFAULT_BASEMAP) option.selected = true;
+          
+            cmbbasemaps.appendChild(option);
+        }
+        
+    }
+
+    function openAttributesTable(e) {
+        let layerid = e.target.layerid;
+        let featureCount = 0;
+        getCount(layerid, c => {
+            featureCount = c;
+            populatePages(e, layerid, featureCount);
+            populateAttributesTable(e, layerid, 1, featureCount)
+        });   
+    }
+
+    function populatePages(e, layerid, featureCount) {
+        let pagesCount = Math.ceil(featureCount / DEFAULT_PAGE_SIZE);//math.ceil rounds it to make sure no decimal in pagesCount...
+        let pagesDiv = document.getElementById("pages");
+        pagesDiv.innerHTML = "";
+        let pagesLabel = document.createElement("label");
+        pagesLabel.textContent = "Page #";
+        pagesLabel.style = "padding: 5px; margin: 5px";
+        pagesDiv.appendChild(pagesLabel);
+        for (let i = 0; i < pagesCount; i++) {
+            let page = document.createElement("button");
+            page.className = "btn-default";
+            if (i == 0) page.className = "btn-info";
+            page.textContent = i+1;
+            buttonPages.push(page);
+            page.addEventListener("click", function(thisEvent) {
+                resetPages();
+                thisEvent.target.className="btn-info";
+                console.log("Page " + (i+1) + " button pushed...");
+
+                populateAttributesTable(e, layerid, i+1, featureCount);
+            });
+            pagesDiv.appendChild(page);
+        };
+        console.log("Page Count: " + pagesCount);
+    }
+
+    function resetPages() {
+        buttonPages.forEach(b => {
+            b.className = "btn-default";
+        })
+    }
+
+    function populateAttributesTable(e, layerid, page, featureCount) {
+        e.target.textContent = featureCount;
+        //alert("Calling attribute  for Layer" + e.target.layerid);
+        let attributeDiv =document.getElementById("attributeTable");
+        //this next part is duplicated from getCount with layerid changed to e.target.layerid...
+        let queryURL = "https://sampleserver6.arcgisonline.com/arcgis/rest/services/" + selectedService + "/MapServer/" + e.target.layerid + "/query";
+        let queryOptions = {
+            responseType: 'json',
+            query: {
+                f: 'json',
+                where: '1=1',
+                returnCountOnly: false,
+                outFields: "*",
+                resultRecordCount: DEFAULT_PAGE_SIZE,
+                resultOffset: (page-1) * DEFAULT_PAGE_SIZE + 1,
+            }
+        };
+        Request(queryURL, queryOptions).then (response => {
+            attributeDiv.innerHTML = "";
+            //alert(response.data.fields.length);
+            let table = document.createElement("table");
+            table.border = 2;
+            //table.align = "center";
+            let header = document.createElement("tr");
+            //header.style = "width: 100%";
+            table.appendChild(header);
+    
+            for (let i = 0; i < response.data.fields.length; i++) {
+                let column = document.createElement("th");
+                column.style = "border-style: solid; border-width: 1px; margin:5px; padding:5px";
+                column.textContent = response.data.fields[i].alias;
+                header.appendChild(column);
+            }; 
+
+            //loop through all features...
+
+            for (let j = 0; j < response.data.features.length; j++) {
+                let feature = response.data.features[j];
+                let row = document.createElement("tr");
+                table.appendChild(row);
+                for (let k = 0; k < response.data.fields.length; k++) {
+                    let field = response.data.fields[k];
+                    let column = document.createElement("th");
+                    column.textContent = feature.attributes[field.name];
+                    
+                    if (field.type == "esriFieldTypeDate") {
+                        let d = new Date(feature.attributes[field.name]);
+                        column.textContent = d;
+                    }
+                    column.style = "border-style: solid; border-width: 1px; margin:5px; padding:5px";
+                    row.appendChild(column);
+                }
+            }
+            attributeDiv.appendChild(table);
+        }, response => el.style.visibility="hidden");
+           
+    }
+
+     //Handler for the signin callback triggered after the user selects an account.
+    function onSignInCallback(resp) {
+        gapi.client.load('plus', 'v1', apiClientLoaded);
+    }
+
+     //* Sets up an API call after the Google API client loads.
+    function apiClientLoaded() {
+        gapi.client.plus.people.get({userId: 'me'}).execute(handleEmailResponse);
+    }
+
+     //* Response callback for when the API client receives a response.
+     //* @param resp The API response object with the user email and profile information.
+    function handleEmailResponse(resp) {
+        var primaryEmail;
+        
+        for (var i=0; i < resp.emails.length; i++) {
+        if (resp.emails[i].type === 'account') primaryEmail = resp.emails[i].value;
+        console.log(primaryEmail);
+        }
+        document.getElementById('responseContainer').value = 'Primary email: ' +
+            primaryEmail + '\n\nFull Response:\n' + JSON.stringify(resp);
+            
+    }
+
+    }
+
+); 
+
+
+  </script> 
+</body>
 </html>
